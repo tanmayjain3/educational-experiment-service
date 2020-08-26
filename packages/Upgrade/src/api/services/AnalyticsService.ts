@@ -308,6 +308,8 @@ export class AnalyticsService {
         // merge all the data log
         const mergedMonitoredExperimentPoint = {};
 
+        this.log.info('current monitoredExperimentPoints', monitoredExperimentPoints, METRICS_JOIN_TEXT);
+
         monitoredExperimentPoints.forEach(({ metric_key, logs_uniquifier, ...monitoredPoint }) => {
           const key = `${monitoredPoint.partition_expId}_${monitoredPoint.partition_expPoint}_${monitoredPoint.user_id}`;
           // filter logs only which are tracked
