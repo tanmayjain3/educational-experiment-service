@@ -49,7 +49,7 @@ export class AnalyticsService {
     private experimentUserRepository: ExperimentUserRepository,
     public awsService: AWSService,
     @Logger(__filename) private log: LoggerInterface
-  ) {}
+  ) { }
 
   public async getEnrollments(experimentIds: string[]): Promise<any> {
     return this.analyticsRepository.getEnrollments(experimentIds);
@@ -283,8 +283,8 @@ export class AnalyticsService {
             experimentInfo.postExperimentRule === POST_EXPERIMENT_RULE.CONTINUE
               ? experimentInfo.postExperimentRule
               : experimentInfo.revertTo
-              ? 'revert ( ' + this.getConditionCode(conditions, experimentInfo.revertTo) + ' )'
-              : 'revert (to default)',
+                ? 'revert ( ' + this.getConditionCode(conditions, experimentInfo.revertTo) + ' )'
+                : 'revert (to default)',
           // tslint:disable-next-line: object-literal-key-quotes
           ExperimentPoints: partitions.map((partition) => partition.expPoint).join(','),
           // tslint:disable-next-line: object-literal-key-quotes
@@ -333,18 +333,18 @@ export class AnalyticsService {
 
           mergedMonitoredExperimentPoint[key] = mergedMonitoredExperimentPoint[key]
             ? {
-                ...mergedMonitoredExperimentPoint[key],
-                logs_data: filteredLogs
-                  ? {
-                      ...mergedMonitoredExperimentPoint[key].logs_data,
-                      [metricToTrackWithUniquifier]: filteredLogs,
-                    }
-                  : { ...mergedMonitoredExperimentPoint[key].logs_data },
-              }
+              ...mergedMonitoredExperimentPoint[key],
+              logs_data: filteredLogs
+                ? {
+                  ...mergedMonitoredExperimentPoint[key].logs_data,
+                  [metricToTrackWithUniquifier]: filteredLogs,
+                }
+                : { ...mergedMonitoredExperimentPoint[key].logs_data },
+            }
             : {
-                ...monitoredPoint,
-                logs_data: filteredLogs ? { [metricToTrackWithUniquifier]: filteredLogs } : filteredLogs,
-              };
+              ...monitoredPoint,
+              logs_data: filteredLogs ? { [metricToTrackWithUniquifier]: filteredLogs } : filteredLogs,
+            };
         });
 
         // get all monitored experiment points ids

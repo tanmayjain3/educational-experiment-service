@@ -46,7 +46,6 @@ export class AnalyticsRepository {
       return [];
     }
     const experimentRepository: ExperimentRepository = this.manager.getCustomRepository(ExperimentRepository);
-
     // for calculating individual enrollments
     const individualMonitoredExperiment = experimentRepository
       .createQueryBuilder('experiment')
@@ -55,7 +54,7 @@ export class AnalyticsRepository {
       .innerJoin(
         MonitoredExperimentPoint,
         'monitoredExperimentPoint',
-        '"monitoredExperimentPoint"."experimentId" = partitions.id'
+        '"monitoredExperimentPoint"."experimentId" = partitions.id AND "monitoredExperimentPoint"."condition" is not null'
       )
       .where('experiment.id IN (:...ids)', { ids: experimentIds })
       .andWhere((qb) => {
@@ -78,7 +77,7 @@ export class AnalyticsRepository {
       .innerJoin(
         MonitoredExperimentPoint,
         'monitoredExperimentPoint',
-        '"monitoredExperimentPoint"."experimentId" = partitions.id'
+        '"monitoredExperimentPoint"."experimentId" = partitions.id AND "monitoredExperimentPoint"."condition" is not null'
       )
       .innerJoin(ExperimentUser, 'experimentUser', '"monitoredExperimentPoint"."userId" = experimentUser.id')
       .where('experiment.id IN (:...ids)', { ids: experimentIds })
@@ -152,7 +151,7 @@ export class AnalyticsRepository {
       .innerJoin(
         MonitoredExperimentPoint,
         'monitoredExperimentPoint',
-        '"monitoredExperimentPoint"."experimentId" = partitions.id AND "individualAssignment"."userId" = "monitoredExperimentPoint"."userId"'
+        '"monitoredExperimentPoint"."experimentId" = partitions.id AND "individualAssignment"."userId" = "monitoredExperimentPoint"."userId" AND "monitoredExperimentPoint"."condition" is not null'
       )
       .groupBy('conditions.id')
       .where('experiment.id = :id', { id: experimentId })
@@ -176,7 +175,7 @@ export class AnalyticsRepository {
       .innerJoin(
         MonitoredExperimentPoint,
         'monitoredExperimentPoint',
-        '"monitoredExperimentPoint"."experimentId" = partitions.id AND "individualAssignment"."userId" = "monitoredExperimentPoint"."userId"'
+        '"monitoredExperimentPoint"."experimentId" = partitions.id AND "individualAssignment"."userId" = "monitoredExperimentPoint"."userId" AND "monitoredExperimentPoint"."condition" is not null'
       )
       .groupBy('conditions.id')
       .addGroupBy('partitions.id')
@@ -207,7 +206,7 @@ export class AnalyticsRepository {
       .innerJoin(
         MonitoredExperimentPoint,
         'monitoredExperimentPoint',
-        '"monitoredExperimentPoint"."experimentId" = partitions.id'
+        '"monitoredExperimentPoint"."experimentId" = partitions.id AND "monitoredExperimentPoint"."condition" is not null'
       )
       .innerJoin(ExperimentUser, 'experimentUser', '"monitoredExperimentPoint"."userId" = "experimentUser".id')
       .where('experiment.id = :id', { id: experimentId })
@@ -229,7 +228,7 @@ export class AnalyticsRepository {
       .innerJoin(
         MonitoredExperimentPoint,
         'monitoredExperimentPoint',
-        '"monitoredExperimentPoint"."experimentId" = partitions.id'
+        '"monitoredExperimentPoint"."experimentId" = partitions.id AND "monitoredExperimentPoint"."condition" is not null'
       )
       .innerJoin(ExperimentUser, 'experimentUser', '"monitoredExperimentPoint"."userId" = "experimentUser".id')
       .where('experiment.id = :id', { id: experimentId })
@@ -321,7 +320,7 @@ export class AnalyticsRepository {
       .innerJoin(
         MonitoredExperimentPoint,
         'monitoredExperimentPoint',
-        '"monitoredExperimentPoint"."experimentId" = partitions.id AND "individualAssignment"."userId" = "monitoredExperimentPoint"."userId"'
+        '"monitoredExperimentPoint"."experimentId" = partitions.id AND "individualAssignment"."userId" = "monitoredExperimentPoint"."userId" AND "monitoredExperimentPoint"."condition" is not null'
       )
       .groupBy('conditions.id')
       .addGroupBy('partitions.id')
@@ -378,7 +377,7 @@ export class AnalyticsRepository {
       .innerJoin(
         MonitoredExperimentPoint,
         'monitoredExperimentPoint',
-        '"monitoredExperimentPoint"."experimentId" = partitions.id'
+        '"monitoredExperimentPoint"."experimentId" = partitions.id AND "monitoredExperimentPoint"."condition" is not null'
       )
       .innerJoin(ExperimentUser, 'experimentUser', '"monitoredExperimentPoint"."userId" = "experimentUser".id')
       .where('experiment.id = :id', { id: experimentId })
