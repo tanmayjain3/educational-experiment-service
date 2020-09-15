@@ -107,7 +107,6 @@ export class ExperimentAssignmentService {
         })
       );
     }
-
     const { workingGroup } = userDoc;
 
     // query root experiment details
@@ -122,6 +121,22 @@ export class ExperimentAssignmentService {
     const experimentId = experimentName ? `${experimentName}_${experimentPoint}` : experimentPoint;
     if (experimentPartition) {
       const { experiment } = experimentPartition;
+      const { conditions } = await this.experimentRepository.findOne({
+        where: {
+          id: experiment.id,
+        },
+        relations: ['conditions'],
+      });
+      const matchedCondtion = conditions.filter((dbCondition) => dbCondition.conditionCode === condition);
+      if (matchedCondtion.length === 0) {
+        throw new Error(
+          JSON.stringify({
+            type: 'Condition not found',
+            message: `Condition not found: ${condition}`,
+          })
+        );
+      }
+      // await this.validCondition(condition, experiment.id);
       const promiseArray = [];
       if (
         experiment.enrollmentCompleteCondition &&
@@ -481,6 +496,26 @@ export class ExperimentAssignmentService {
     });
     return this.errorRepository.saveRawJson(error);
   }
+
+  // private async validCondition(condition: string | null, id: string): Promise<void> {
+  //   if (condition != null) {
+  //     const { conditions } = await this.experimentRepository.findOne({
+  //       where: {
+  //         id,
+  //       },
+  //       relations: ['conditions'],
+  //     });
+  //     const matchedCondtion = conditions.filter((dbCondition) => dbCondition.conditionCode === condition);
+  //     if (matchedCondtion.length === 0) {
+  //       throw new Error(
+  //         JSON.stringify({
+  //           type: SERVER_ERROR.CONDTION_NOT_FOUND,
+  //           message: `Condition not found: ${condition}`,
+  //         })
+  //       );
+  //     }
+  //   }
+  // }
 
   private async createLog(
     individualMetrics: ILogInput,
