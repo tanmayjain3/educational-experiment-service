@@ -131,12 +131,11 @@ export class ExperimentAssignmentService {
       if (matchedCondtion.length === 0) {
         throw new Error(
           JSON.stringify({
-            type: 'Condition not found',
+            type: SERVER_ERROR.QUERY_FAILED,
             message: `Condition not found: ${condition}`,
           })
         );
       }
-      // await this.validCondition(condition, experiment.id);
       const promiseArray = [];
       if (
         experiment.enrollmentCompleteCondition &&
@@ -496,26 +495,6 @@ export class ExperimentAssignmentService {
     });
     return this.errorRepository.saveRawJson(error);
   }
-
-  // private async validCondition(condition: string | null, id: string): Promise<void> {
-  //   if (condition != null) {
-  //     const { conditions } = await this.experimentRepository.findOne({
-  //       where: {
-  //         id,
-  //       },
-  //       relations: ['conditions'],
-  //     });
-  //     const matchedCondtion = conditions.filter((dbCondition) => dbCondition.conditionCode === condition);
-  //     if (matchedCondtion.length === 0) {
-  //       throw new Error(
-  //         JSON.stringify({
-  //           type: SERVER_ERROR.CONDTION_NOT_FOUND,
-  //           message: `Condition not found: ${condition}`,
-  //         })
-  //       );
-  //     }
-  //   }
-  // }
 
   private async createLog(
     individualMetrics: ILogInput,
