@@ -128,7 +128,7 @@ export class ExperimentAssignmentService {
         relations: ['conditions'],
       });
       const matchedCondtion = conditions.filter((dbCondition) => dbCondition.conditionCode === condition);
-      if (matchedCondtion.length === 0) {
+      if (matchedCondtion.length === 0 && condition !== null) {
         throw new Error(
           JSON.stringify({
             type: SERVER_ERROR.QUERY_FAILED,
