@@ -12,6 +12,7 @@ import {
   IExperimentEnrollmentDetailDateStats,
   POST_EXPERIMENT_RULE,
   ENROLLMENT_CODE,
+  EXPERIMENT_LOG_TYPE
 } from 'upgrade_types';
 import { AnalyticsRepository } from '../repositories/AnalyticsRepository';
 import { Experiment } from '../models/Experiment';
@@ -24,6 +25,9 @@ import { SERVER_ERROR } from 'upgrade_types';
 import { Logger, LoggerInterface } from '../../decorators/Logger';
 import { env } from '../../env';
 import { METRICS_JOIN_TEXT } from './MetricService';
+import { ErrorService } from './ErrorService';
+import { ExperimentAuditLogRepository } from '../repositories/ExperimentAuditLogRepository';
+import { UserRepository } from '../repositories/UserRepository';
 
 interface IEnrollmentStatByDate {
   date: string;
@@ -47,9 +51,14 @@ export class AnalyticsService {
     private analyticsRepository: AnalyticsRepository,
     @OrmRepository()
     private experimentUserRepository: ExperimentUserRepository,
+    @OrmRepository()
+    private experimentAuditLogRepository: ExperimentAuditLogRepository,
+    @OrmRepository()
+    private userRepository: UserRepository,
     public awsService: AWSService,
+    public errorService: ErrorService,
     @Logger(__filename) private log: LoggerInterface
-  ) {}
+  ) { }
 
   public async getEnrollments(experimentIds: string[]): Promise<any> {
     return this.analyticsRepository.getEnrollments(experimentIds);
@@ -283,8 +292,8 @@ export class AnalyticsService {
             experimentInfo.postExperimentRule === POST_EXPERIMENT_RULE.CONTINUE
               ? experimentInfo.postExperimentRule
               : experimentInfo.revertTo
-              ? 'revert ( ' + this.getConditionCode(conditions, experimentInfo.revertTo) + ' )'
-              : 'revert (to default)',
+                ? 'revert ( ' + this.getConditionCode(conditions, experimentInfo.revertTo) + ' )'
+                : 'revert (to default)',
           // tslint:disable-next-line: object-literal-key-quotes
           ExperimentPoints: partitions.map((partition) => partition.expPoint).join(','),
           // tslint:disable-next-line: object-literal-key-quotes
@@ -329,18 +338,18 @@ export class AnalyticsService {
 
           mergedMonitoredExperimentPoint[key] = mergedMonitoredExperimentPoint[key]
             ? {
-                ...mergedMonitoredExperimentPoint[key],
-                logs_data: filteredLogs
-                  ? {
-                      ...mergedMonitoredExperimentPoint[key].logs_data,
-                      [metricToTrackWithUniquifier]: filteredLogs,
-                    }
-                  : { ...mergedMonitoredExperimentPoint[key].logs_data },
-              }
+              ...mergedMonitoredExperimentPoint[key],
+              logs_data: filteredLogs
+                ? {
+                  ...mergedMonitoredExperimentPoint[key].logs_data,
+                  [metricToTrackWithUniquifier]: filteredLogs,
+                }
+                : { ...mergedMonitoredExperimentPoint[key].logs_data },
+            }
             : {
-                ...monitoredPoint,
-                logs_data: filteredLogs ? { [metricToTrackWithUniquifier]: filteredLogs } : filteredLogs,
-              };
+              ...monitoredPoint,
+              logs_data: filteredLogs ? { [metricToTrackWithUniquifier]: filteredLogs } : filteredLogs,
+            };
         });
 
         // get all monitored experiment points ids
@@ -435,41 +444,67 @@ export class AnalyticsService {
         await csv.toDisk(`${folderPath}${monitoredPointCSV}`, { append: true });
       }
 
-      const experimentFileBuffer = fs.readFileSync(`${folderPath}${experimentCSV}`);
-      const monitorFileBuffer = fs.readFileSync(`${folderPath}${monitoredPointCSV}`);
-
-      // delete the file from local store
-      fs.unlinkSync(`${folderPath}${experimentCSV}`);
-      fs.unlinkSync(`${folderPath}${monitoredPointCSV}`);
-
       const email_export = env.email.emailBucket;
       const email_expiry_time = env.email.expireAfterSeconds;
       const email_from = env.email.from;
 
+      let monitorFileBuffer;
+      let signedURLMonitored;
+
+      const experimentFileBuffer = fs.readFileSync(`${folderPath}${experimentCSV}`);
+
+      // delete the file from local store
+      fs.unlinkSync(`${folderPath}${experimentCSV}`);
+
       // upload the csv to s3
       await Promise.all([
         this.awsService.uploadCSV(experimentFileBuffer, email_export, experimentCSV),
-        this.awsService.uploadCSV(monitorFileBuffer, email_export, monitoredPointCSV),
       ]);
 
       // generate signed url
       const signedUrl = await Promise.all([
         this.awsService.generateSignedURL(email_export, experimentCSV, email_expiry_time),
-        this.awsService.generateSignedURL(email_export, monitoredPointCSV, email_expiry_time),
       ]);
 
-      const emailText = `Here are the new exported data
-      <br>
-      <a href=\"${signedUrl[0]}\">Experiment Metadata</a>
-      <br>
-      <a href=\"${signedUrl[1]}\">Monitored Data</a>
-    `;
+      let emailText;
+
+      if (promiseData[2] > 0) {
+        monitorFileBuffer = fs.readFileSync(`${folderPath}${monitoredPointCSV}`);
+
+        fs.unlinkSync(`${folderPath}${monitoredPointCSV}`);
+
+        await Promise.all([
+          this.awsService.uploadCSV(monitorFileBuffer, email_export, monitoredPointCSV),
+        ]);
+
+        signedURLMonitored = await Promise.all([
+          this.awsService.generateSignedURL(email_export, monitoredPointCSV, email_expiry_time),
+        ]);
+
+        emailText = `Here are the new exported data
+       <br>
+       <a href=\"${signedUrl[0]}\">Experiment Metadata</a>
+       <br>
+       <a href=\"${signedURLMonitored[0]}\">Monitored Data</a>`;
+      } else {
+        emailText = `Here are the new exported data
+        <br>
+        <a href=\"${signedUrl[0]}\">Experiment Metadata</a>`;
+      }
 
       const emailSubject = `Exported Data for experiment ${experiment.name}`;
       // send email to the user
       await this.awsService.sendEmail(email_from, email, emailText, emailSubject);
+      const user = await this.userRepository.findOne({ email });
+      this.experimentAuditLogRepository.saveRawJson(EXPERIMENT_LOG_TYPE.EXPERIMENT_STATE_CHANGED, { email }, user);
     } catch (error) {
-      throw Promise.reject(new Error(SERVER_ERROR.EMAIL_SEND_ERROR + error));
+      await this.errorService.create({
+        endPoint: '/api/stats/csv',
+        errorCode: 417,
+        message: `Email send error: ${JSON.stringify(error, undefined, 2)}`,
+        name: 'Email send error',
+        type: SERVER_ERROR.EMAIL_SEND_ERROR,
+      } as any);
     }
 
     this.log.info('Completing experiment process');
