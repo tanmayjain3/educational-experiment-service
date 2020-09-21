@@ -49,7 +49,7 @@ export class AnalyticsService {
     private experimentUserRepository: ExperimentUserRepository,
     public awsService: AWSService,
     @Logger(__filename) private log: LoggerInterface
-  ) {}
+  ) { }
 
   public async getEnrollments(experimentIds: string[]): Promise<any> {
     return this.analyticsRepository.getEnrollments(experimentIds);
@@ -283,8 +283,8 @@ export class AnalyticsService {
             experimentInfo.postExperimentRule === POST_EXPERIMENT_RULE.CONTINUE
               ? experimentInfo.postExperimentRule
               : experimentInfo.revertTo
-              ? 'revert ( ' + this.getConditionCode(conditions, experimentInfo.revertTo) + ' )'
-              : 'revert (to default)',
+                ? 'revert ( ' + this.getConditionCode(conditions, experimentInfo.revertTo) + ' )'
+                : 'revert (to default)',
           // tslint:disable-next-line: object-literal-key-quotes
           ExperimentPoints: partitions.map((partition) => partition.expPoint).join(','),
           // tslint:disable-next-line: object-literal-key-quotes
@@ -296,6 +296,7 @@ export class AnalyticsService {
       let csv = new ObjectsToCsv(csvRows);
       await csv.toDisk(`${folderPath}${experimentCSV}`);
       const take = 50;
+      // console.log('tanmay check out', promiseData[2]);
       for (let i = 1; i <= promiseData[2]; i = i + take) {
         csvRows = [];
         const monitoredExperimentPoints = await this.monitoredExperimentPointRepository.getMonitorExperimentPointForExport(
@@ -307,11 +308,11 @@ export class AnalyticsService {
 
         // merge all the data log
         const mergedMonitoredExperimentPoint = {};
-
+        // console.log('tanmay check', monitoredExperimentPoints);
         monitoredExperimentPoints.forEach(({ metric_key, logs_uniquifier, ...monitoredPoint }) => {
           const key = `${monitoredPoint.partition_expId}_${monitoredPoint.partition_expPoint}_${monitoredPoint.user_id}`;
           // filter logs only which are tracked
-          const metricToTrack = metric_key;
+          const metricToTrack = metric_key || ' ';
           const metricArray = metricToTrack.split(METRICS_JOIN_TEXT);
           let filteredLogs = monitoredPoint.logs_data;
           // tslint:disable-next-line:prefer-for-of
@@ -329,18 +330,18 @@ export class AnalyticsService {
 
           mergedMonitoredExperimentPoint[key] = mergedMonitoredExperimentPoint[key]
             ? {
-                ...mergedMonitoredExperimentPoint[key],
-                logs_data: filteredLogs
-                  ? {
-                      ...mergedMonitoredExperimentPoint[key].logs_data,
-                      [metricToTrackWithUniquifier]: filteredLogs,
-                    }
-                  : { ...mergedMonitoredExperimentPoint[key].logs_data },
-              }
+              ...mergedMonitoredExperimentPoint[key],
+              logs_data: filteredLogs
+                ? {
+                  ...mergedMonitoredExperimentPoint[key].logs_data,
+                  [metricToTrackWithUniquifier]: filteredLogs,
+                }
+                : { ...mergedMonitoredExperimentPoint[key].logs_data },
+            }
             : {
-                ...monitoredPoint,
-                logs_data: filteredLogs ? { [metricToTrackWithUniquifier]: filteredLogs } : filteredLogs,
-              };
+              ...monitoredPoint,
+              logs_data: filteredLogs ? { [metricToTrackWithUniquifier]: filteredLogs } : filteredLogs,
+            };
         });
 
         // get all monitored experiment points ids
@@ -348,7 +349,6 @@ export class AnalyticsService {
           (monitoredPoint) =>
             `${monitoredPoint.partition_expId}_${monitoredPoint.partition_expPoint}_${monitoredPoint.user_id}`
         );
-
         // query experiment user
         const experimentUsers = monitoredExperimentPoints.map((monitoredPoint) => monitoredPoint.user_id);
         const experimentUserSet = new Set(experimentUsers);
@@ -436,37 +436,52 @@ export class AnalyticsService {
       }
 
       const experimentFileBuffer = fs.readFileSync(`${folderPath}${experimentCSV}`);
-      const monitorFileBuffer = fs.readFileSync(`${folderPath}${monitoredPointCSV}`);
-
+      let monitorFileBuffer;
+      let signedURLMo;
       // delete the file from local store
       fs.unlinkSync(`${folderPath}${experimentCSV}`);
-      fs.unlinkSync(`${folderPath}${monitoredPointCSV}`);
 
       const email_export = env.email.emailBucket;
       const email_expiry_time = env.email.expireAfterSeconds;
       const email_from = env.email.from;
 
+      if (promiseData[2] > 0) {
+        monitorFileBuffer = fs.readFileSync(`${folderPath}${monitoredPointCSV}`);
+        fs.unlinkSync(`${folderPath}${monitoredPointCSV}`);
+        await Promise.all([
+          this.awsService.uploadCSV(monitorFileBuffer, email_export, monitoredPointCSV),
+        ]);
+        signedURLMo = await Promise.all([
+          this.awsService.generateSignedURL(email_export, monitoredPointCSV, email_expiry_time),
+        ]);
+
+      }
       // upload the csv to s3
       await Promise.all([
         this.awsService.uploadCSV(experimentFileBuffer, email_export, experimentCSV),
-        this.awsService.uploadCSV(monitorFileBuffer, email_export, monitoredPointCSV),
+        // this.awsService.uploadCSV(monitorFileBuffer, email_export, monitoredPointCSV),
       ]);
 
       // generate signed url
       const signedUrl = await Promise.all([
         this.awsService.generateSignedURL(email_export, experimentCSV, email_expiry_time),
-        this.awsService.generateSignedURL(email_export, monitoredPointCSV, email_expiry_time),
       ]);
-
-      const emailText = `Here are the new exported data
-      <br>
-      <a href=\"${signedUrl[0]}\">Experiment Metadata</a>
-      <br>
-      <a href=\"${signedUrl[1]}\">Monitored Data</a>
-    `;
+      let emailText;
+      if (promiseData[2] > 0) {
+        emailText = `Here are the new exported data
+        <br>
+        <a href=\"${signedUrl[0]}\">Experiment Metadata</a>
+        <br>
+        <a href=\"${signedURLMo[0]}\">Monitored Data</a>`;
+      } else {
+        emailText = `Here are the new exported data
+        <br>
+        <a href=\"${signedUrl[0]}\">Experiment Metadata</a>`;
+      }
 
       const emailSubject = `Exported Data for experiment ${experiment.name}`;
       // send email to the user
+      console.log('email export check');
       await this.awsService.sendEmail(email_from, email, emailText, emailSubject);
     } catch (error) {
       throw Promise.reject(new Error(SERVER_ERROR.EMAIL_SEND_ERROR + error));
