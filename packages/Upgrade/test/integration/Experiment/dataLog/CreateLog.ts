@@ -42,7 +42,6 @@ export default async function CreateLog(): Promise<void> {
 
   const experimentName = experimentObject.partitions[0].expId;
   const experimentPoint = experimentObject.partitions[0].expPoint;
-
   await settingService.setClientCheck(false, true);
 
   await metricService.saveAllMetrics(metrics as any);
