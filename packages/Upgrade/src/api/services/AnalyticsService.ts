@@ -12,6 +12,7 @@ import {
   IExperimentEnrollmentDetailDateStats,
   POST_EXPERIMENT_RULE,
   ENROLLMENT_CODE,
+  EXPERIMENT_LOG_TYPE
 } from 'upgrade_types';
 import { AnalyticsRepository } from '../repositories/AnalyticsRepository';
 import { Experiment } from '../models/Experiment';
@@ -24,6 +25,9 @@ import { SERVER_ERROR } from 'upgrade_types';
 import { Logger, LoggerInterface } from '../../decorators/Logger';
 import { env } from '../../env';
 import { METRICS_JOIN_TEXT } from './MetricService';
+import { ErrorService } from './ErrorService';
+import { ExperimentAuditLogRepository } from '../repositories/ExperimentAuditLogRepository';
+import { UserRepository } from '../repositories/UserRepository';
 
 interface IEnrollmentStatByDate {
   date: string;
@@ -47,7 +51,12 @@ export class AnalyticsService {
     private analyticsRepository: AnalyticsRepository,
     @OrmRepository()
     private experimentUserRepository: ExperimentUserRepository,
+    @OrmRepository()
+    private experimentAuditLogRepository: ExperimentAuditLogRepository,
+    @OrmRepository()
+    private userRepository: UserRepository,
     public awsService: AWSService,
+    public errorService: ErrorService,
     @Logger(__filename) private log: LoggerInterface
   ) { }
 
@@ -296,7 +305,6 @@ export class AnalyticsService {
       let csv = new ObjectsToCsv(csvRows);
       await csv.toDisk(`${folderPath}${experimentCSV}`);
       const take = 50;
-      // console.log('tanmay check out', promiseData[2]);
       for (let i = 1; i <= promiseData[2]; i = i + take) {
         csvRows = [];
         const monitoredExperimentPoints = await this.monitoredExperimentPointRepository.getMonitorExperimentPointForExport(
@@ -308,7 +316,6 @@ export class AnalyticsService {
 
         // merge all the data log
         const mergedMonitoredExperimentPoint = {};
-        // console.log('tanmay check', monitoredExperimentPoints);
         monitoredExperimentPoints.forEach(({ metric_key, logs_uniquifier, ...monitoredPoint }) => {
           const key = `${monitoredPoint.partition_expId}_${monitoredPoint.partition_expPoint}_${monitoredPoint.user_id}`;
           // filter logs only which are tracked
@@ -435,44 +442,48 @@ export class AnalyticsService {
         await csv.toDisk(`${folderPath}${monitoredPointCSV}`, { append: true });
       }
 
-      const experimentFileBuffer = fs.readFileSync(`${folderPath}${experimentCSV}`);
-      let monitorFileBuffer;
-      let signedURLMo;
-      // delete the file from local store
-      fs.unlinkSync(`${folderPath}${experimentCSV}`);
-
       const email_export = env.email.emailBucket;
       const email_expiry_time = env.email.expireAfterSeconds;
       const email_from = env.email.from;
 
-      if (promiseData[2] > 0) {
-        monitorFileBuffer = fs.readFileSync(`${folderPath}${monitoredPointCSV}`);
-        fs.unlinkSync(`${folderPath}${monitoredPointCSV}`);
-        await Promise.all([
-          this.awsService.uploadCSV(monitorFileBuffer, email_export, monitoredPointCSV),
-        ]);
-        signedURLMo = await Promise.all([
-          this.awsService.generateSignedURL(email_export, monitoredPointCSV, email_expiry_time),
-        ]);
+      let monitorFileBuffer;
+      let signedURLMonitored;
 
-      }
+      const experimentFileBuffer = fs.readFileSync(`${folderPath}${experimentCSV}`);
+
+      // delete the file from local store
+      fs.unlinkSync(`${folderPath}${experimentCSV}`);
+
       // upload the csv to s3
       await Promise.all([
         this.awsService.uploadCSV(experimentFileBuffer, email_export, experimentCSV),
-        // this.awsService.uploadCSV(monitorFileBuffer, email_export, monitoredPointCSV),
       ]);
 
       // generate signed url
       const signedUrl = await Promise.all([
         this.awsService.generateSignedURL(email_export, experimentCSV, email_expiry_time),
       ]);
+
       let emailText;
+
       if (promiseData[2] > 0) {
+        monitorFileBuffer = fs.readFileSync(`${folderPath}${monitoredPointCSV}`);
+
+        fs.unlinkSync(`${folderPath}${monitoredPointCSV}`);
+
+        await Promise.all([
+          this.awsService.uploadCSV(monitorFileBuffer, email_export, monitoredPointCSV),
+        ]);
+
+        signedURLMonitored = await Promise.all([
+          this.awsService.generateSignedURL(email_export, monitoredPointCSV, email_expiry_time),
+        ]);
+
         emailText = `Here are the new exported data
-        <br>
-        <a href=\"${signedUrl[0]}\">Experiment Metadata</a>
-        <br>
-        <a href=\"${signedURLMo[0]}\">Monitored Data</a>`;
+       <br>
+       <a href=\"${signedUrl[0]}\">Experiment Metadata</a>
+       <br>
+       <a href=\"${signedURLMonitored[0]}\">Monitored Data</a>`;
       } else {
         emailText = `Here are the new exported data
         <br>
@@ -481,10 +492,17 @@ export class AnalyticsService {
 
       const emailSubject = `Exported Data for experiment ${experiment.name}`;
       // send email to the user
-      console.log('email export check');
       await this.awsService.sendEmail(email_from, email, emailText, emailSubject);
+      const user = await this.userRepository.findOne({ email });
+      this.experimentAuditLogRepository.saveRawJson(EXPERIMENT_LOG_TYPE.EXPERIMENT_STATE_CHANGED, { email }, user);
     } catch (error) {
-      throw Promise.reject(new Error(SERVER_ERROR.EMAIL_SEND_ERROR + error));
+      await this.errorService.create({
+        endPoint: '/api/stats/csv',
+        errorCode: 417,
+        message: `Email send error: ${JSON.stringify(error, undefined, 2)}`,
+        name: 'Email send error',
+        type: SERVER_ERROR.EMAIL_SEND_ERROR,
+      } as any);
     }
 
     this.log.info('Completing experiment process');
