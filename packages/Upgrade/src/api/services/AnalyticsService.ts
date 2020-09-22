@@ -317,7 +317,9 @@ export class AnalyticsService {
         // merge all the data log
         const mergedMonitoredExperimentPoint = {};
         monitoredExperimentPoints.forEach(({ metric_key, logs_uniquifier, ...monitoredPoint }) => {
-          const key = `${monitoredPoint.partition_expId}_${monitoredPoint.partition_expPoint}_${monitoredPoint.user_id}`;
+          const key = monitoredPoint.partition_expId
+            ? `${monitoredPoint.partition_expId}_${monitoredPoint.partition_expPoint}_${monitoredPoint.user_id}`
+            : `${monitoredPoint.partition_expPoint}_${monitoredPoint.user_id}`;
           // filter logs only which are tracked
           const metricToTrack = metric_key || ' ';
           const metricArray = metricToTrack.split(METRICS_JOIN_TEXT);
@@ -355,7 +357,9 @@ export class AnalyticsService {
         // get all monitored experiment points ids
         const monitoredPointIds = monitoredExperimentPoints.map(
           (monitoredPoint) =>
-            `${monitoredPoint.partition_expId}_${monitoredPoint.partition_expPoint}_${monitoredPoint.user_id}`
+            monitoredPoint.partition_expId
+              ? `${monitoredPoint.partition_expId}_${monitoredPoint.partition_expPoint}_${monitoredPoint.user_id}`
+              : `${monitoredPoint.partition_expPoint}_${monitoredPoint.user_id}`
         );
         // query experiment user
         const experimentUsers = monitoredExperimentPoints.map((monitoredPoint) => monitoredPoint.user_id);
