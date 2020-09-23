@@ -440,7 +440,7 @@ export class AnalyticsService {
             ExperimentPoint: data.partition_expPoint,
             // tslint:disable-next-line: object-literal-key-quotes
             ExperimentId: data.partition_expId,
-            'Metrics monitored': JSON.stringify(data.logs_data),
+            'Metrics monitored': data.logs_data == null ? '' : JSON.stringify(data.logs_data),
           });
         });
         csv = new ObjectsToCsv(csvRows);
