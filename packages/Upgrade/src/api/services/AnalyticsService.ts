@@ -499,7 +499,7 @@ export class AnalyticsService {
       // send email to the user
       await this.awsService.sendEmail(email_from, email, emailText, emailSubject);
       const user = await this.userRepository.findOne({ email });
-      this.experimentAuditLogRepository.saveRawJson(EXPERIMENT_LOG_TYPE.EXPERIMENT_STATE_CHANGED, { email }, user);
+      this.experimentAuditLogRepository.saveRawJson(EXPERIMENT_LOG_TYPE.EXPERIMENT_DATA_EXPORTED, { experimentName: experimentInfo.name }, user);
     } catch (error) {
       await this.errorService.create({
         endPoint: '/api/stats/csv',
