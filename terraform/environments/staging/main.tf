@@ -13,7 +13,6 @@ terraform {
 
 provider "aws" {
   region = var.aws_region
-  profile = var.aws_profile
 }
 
 
@@ -28,11 +27,12 @@ module "aws_lambda_function" {
   environment           = var.environment 
   prefix                = var.prefix 
   app_version           = var.app_version 
-  lambda_path           = "../../packages/Schedular"  
   output_path           = "../environments/${var.current_directory}/.terraform"  
   function_name         = "Schedule" 
   function_handler      = "schedule.schedule"
   runtime               =  "nodejs10.x"
+  s3_lambda_bucket      = var.s3_lambda_bucket
+  s3_lambda_key         = var.s3_lambda_key
 }
 
 output "lambda"{
@@ -93,6 +93,7 @@ module "aws-ebs-app" {
   TYPEORM_SYNCHRONIZE   = var.TYPEORM_SYNCHRONIZE
   CONTEXT               = var.CONTEXT
   ADMIN_USERS           = var.ADMIN_USERS
+  RDS_PASSWORD          = var.RDS_PASSWORD
 
   SCHEDULER_STEP_FUNCTION = module.aws-state-machine.step_function_arn
   PATH_TO_PRIVATE_KEY     = "id_rsa"
@@ -112,7 +113,7 @@ resource "null_resource" "update-ebs-env" {
   }
   
   provisioner "local-exec" {
-    command = "export AWS_PROFILE=${var.aws_profile} && aws elasticbeanstalk update-environment --region ${var.aws_region} --environment-name ${module.aws-ebs-app.ebs-env} --option-settings Namespace=aws:elasticbeanstalk:application:environment,OptionName=HOST_URL,Value=http://${module.aws-ebs-app.ebs-cname}/api"
+    command = "aws elasticbeanstalk update-environment --region ${var.aws_region} --environment-name ${module.aws-ebs-app.ebs-env} --option-settings Namespace=aws:elasticbeanstalk:application:environment,OptionName=HOST_URL,Value=http://${module.aws-ebs-app.ebs-cname}/api"
   }
 }
 

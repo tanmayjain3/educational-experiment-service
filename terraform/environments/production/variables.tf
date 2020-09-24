@@ -1,7 +1,6 @@
 # General variables
 variable "current_directory"{}
 variable "aws_region"{}
-variable "aws_profile"{}
 variable "environment"{}
 variable "prefix"{}
 variable "app_version"{}
@@ -20,6 +19,10 @@ variable "ebs_app_name"{}
 variable "autoscaling_min_size"{}
 variable "autoscaling_max_size"{}
 
+# Lambda variables
+variable "s3_lambda_bucket" {}
+variable "s3_lambda_key" {}
+
 # APP environment variables
 variable "GOOGLE_CLIENT_ID"{}
 variable "DOMAIN_NAME"{
@@ -32,6 +35,7 @@ variable "TOKEN_SECRET_KEY"{}
 variable "AUTH_CHECK"{}
 variable "CONTEXT"{}
 variable "ADMIN_USERS"{}
+variable "RDS_PASSWORD"{}
 
 # Email
 variable "EMAIL_FROM" {}

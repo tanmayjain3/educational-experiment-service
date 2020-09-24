@@ -15,9 +15,14 @@ export class VersionController {
 
     /**
      * @swagger
-     * /stats/versionNumber:
-     *    post:
-     *       description: Get current version number
+     * /version:
+     *    get:
+     *       description: Get Server Version
+     *       tags:
+     *         - Version
+     *       responses:
+     *          '200':
+     *            description: Get Server Version
      */
     @Get('/')
     public async getVersionNumber(): Promise<string> {
