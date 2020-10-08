@@ -32,7 +32,7 @@ import { Query } from '../models/Query';
 import { MetricRepository } from '../repositories/MetricRepository';
 import { QueryRepository } from '../repositories/QueryRepository';
 import { env } from '../../env';
-
+import { ErrorService } from './ErrorService';
 // const METRIC_KEY_DIVIDER = "_@%@_";
 
 @Service()
@@ -50,6 +50,7 @@ export class ExperimentService {
     @OrmRepository() private queryRepository: QueryRepository,
     public previewUserService: PreviewUserService,
     public scheduledJobService: ScheduledJobService,
+    public errorService: ErrorService,
     @Logger(__filename) private log: LoggerInterface
   ) {}
 
@@ -243,6 +244,43 @@ export class ExperimentService {
     await this.updateExperimentSchedules(experimentId);
 
     return updatedState;
+  }
+
+  public async importExperiment(experiment: ExperimentInput, user: User): Promise<any> {
+    this.log.info('Import experiment');
+    const duplicateExperiment = await this.experimentRepository.findOne(experiment.id);
+    if (duplicateExperiment && experiment.id !== undefined) {
+      // return this.errorService.create({
+      //   endPoint: '/api/experiments/import',
+      //   errorCode: 417,
+      //   message: `Duplicate experiment id`,
+      //   name: 'Duplicate experiment id',
+      //   type: SERVER_ERROR.QUERY_FAILED,
+      // } as any);
+      throw new Error(`Error in creating conditions, partitions, queries "updateExperimentInDB"`);
+    }
+    const experimentPartitions = experiment.partitions;
+    for (const partition of experimentPartitions) {
+      partition.id = partition.expId ? `${partition.expId}_${partition.expPoint}` : `${partition.expPoint}`;
+      const partitionExist = await this.experimentPartitionRepository.findOne(partition.id);
+      if (partitionExist) {
+        if (experimentPartitions.indexOf(partition) >= 0) {
+          experimentPartitions.splice(experimentPartitions.indexOf(partition), 1);
+        }
+      }
+    }
+    if (experimentPartitions.length === 0) {
+      // return this.errorService.create({
+      //   endPoint: '/api/experiments/import',
+      //   errorCode: 417,
+      //   message: `Duplicate partition id`,
+      //   name: 'Duplicate partition id',
+      //   type: SERVER_ERROR.QUERY_FAILED,
+      // } as any);
+      throw new Error(`Error in creating conditions, partitions, queries "updateExperimentInDB"`);
+    }
+    experiment.partitions  = experimentPartitions;
+    return this.create(experiment, user);
   }
 
   private async updateExperimentSchedules(experimentId: string): Promise<void> {
@@ -700,7 +738,6 @@ export class ExperimentService {
           partition.experiment = experimentDoc;
           return partition;
         });
-
       // saving conditions and saving partitions
       let conditionDocs: ExperimentCondition[];
       let partitionDocs: ExperimentPartition[];
