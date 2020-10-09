@@ -17,7 +17,7 @@ import { ScheduledJobService } from './ScheduledJobService';
 import { getConnection, In } from 'typeorm';
 import { ExperimentAuditLogRepository } from '../repositories/ExperimentAuditLogRepository';
 import { diffString } from 'json-diff';
-import { EXPERIMENT_LOG_TYPE, EXPERIMENT_STATE, CONSISTENCY_RULE, ENROLLMENT_CODE } from 'upgrade_types';
+import { EXPERIMENT_LOG_TYPE, EXPERIMENT_STATE, CONSISTENCY_RULE, ENROLLMENT_CODE, SERVER_ERROR } from 'upgrade_types';
 import { IndividualExclusionRepository } from '../repositories/IndividualExclusionRepository';
 import { GroupExclusionRepository } from '../repositories/GroupExclusionRepository';
 import { MonitoredExperimentPointRepository } from '../repositories/MonitoredExperimentPointRepository';
@@ -250,18 +250,10 @@ export class ExperimentService {
     this.log.info('Import experiment');
     const duplicateExperiment = await this.experimentRepository.findOne(experiment.id);
     if (duplicateExperiment && experiment.id !== undefined) {
-      // return this.errorService.create({
-      //   endPoint: '/api/experiments/import',
-      //   errorCode: 417,
-      //   message: `Duplicate experiment id`,
-      //   name: 'Duplicate experiment id',
-      //   type: SERVER_ERROR.QUERY_FAILED,
-      // } as any);
-      throw new Error(`Error in creating conditions, partitions, queries "updateExperimentInDB"`);
+      throw new Error(JSON.stringify({type : SERVER_ERROR.QUERY_FAILED, message: 'Duplicate experiment'}));
     }
     const experimentPartitions = experiment.partitions;
     for (const partition of experimentPartitions) {
-      partition.id = partition.expId ? `${partition.expId}_${partition.expPoint}` : `${partition.expPoint}`;
       const partitionExist = await this.experimentPartitionRepository.findOne(partition.id);
       if (partitionExist) {
         if (experimentPartitions.indexOf(partition) >= 0) {
@@ -270,16 +262,14 @@ export class ExperimentService {
       }
     }
     if (experimentPartitions.length === 0) {
-      // return this.errorService.create({
-      //   endPoint: '/api/experiments/import',
-      //   errorCode: 417,
-      //   message: `Duplicate partition id`,
-      //   name: 'Duplicate partition id',
-      //   type: SERVER_ERROR.QUERY_FAILED,
-      // } as any);
-      throw new Error(`Error in creating conditions, partitions, queries "updateExperimentInDB"`);
+      throw new Error(JSON.stringify({type : SERVER_ERROR.QUERY_FAILED, message: 'Duplicate partition'}));
     }
     experiment.partitions  = experimentPartitions;
+    experiment.endDate = null;
+    experiment.startDate = null;
+    experiment.endOn = null;
+    experiment.createdAt = new Date();
+    experiment.state = EXPERIMENT_STATE.INACTIVE;
     return this.create(experiment, user);
   }
 
